@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <declare-styleable name="PatternDeblockView">
+        <!--  按下时的圆的颜色-->
+        <attr name="pressed_color" format="color"></attr>
+        <!--错误时的圆的颜色-->
+        <attr name="error_color" format="color"></attr>
+        <!--平常时的颜色-->
+        <attr name="normal_color" format="color"></attr>
+        <!--错误时的线的颜色-->
+        <attr name="error_line_color" format="color"></attr>
+        <!--滑动时的线上的颜色-->
+        <attr name="pressed_line_color" format="color"></attr>
+    </declare-styleable>
+</resources>
