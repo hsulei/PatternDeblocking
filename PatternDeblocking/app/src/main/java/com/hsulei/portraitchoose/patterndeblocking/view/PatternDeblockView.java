@@ -6,6 +6,7 @@ import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
 import android.util.AttributeSet;
+import android.util.Log;
 import android.view.MotionEvent;
 import android.view.View;
 
@@ -22,7 +23,8 @@ import java.util.List;
 public class PatternDeblockView extends View {
 
     private final static String TAG = "PatternDeblockView";
-
+    //最小值
+    private float min;
     // 按下时的颜色
     private int mPressedColor = Color.BLUE;
     //错误时的颜色
@@ -161,7 +163,7 @@ public class PatternDeblockView extends View {
         float offsetX = 0;
         float offsetY = 0;
 
-        int min = Math.min(width, height);//获取最小值
+        min = Math.min(width, height);//获取最小值
         if (width >= height) {//如果宽比高大
             offsetX = (width - height) / 2;
         } else {//如果宽比高小
@@ -247,14 +249,16 @@ public class PatternDeblockView extends View {
                 }
                 break;
             case MotionEvent.ACTION_MOVE:
-                //移动时有两情况需要进考虑，1：在点的范围时需要把点选中，2：重复点不计算
+                //移动时有两情况需要进考虑，1：在点的范围时需要把点选中，2：重复点不计算，3：一条线上 不能跳过选择
                 if (!isFinish) {
                     isRepeat = checkIsRepeat(movingX, movingY);
                     if (!isRepeat) {//如果不在已经选中的点中，判读是否在点阵中
                         point = choosePoints(movingX, movingY);
+                        //进行跳过选择
                         if (null != point) {
                             mChoosePoints.add(point);
                         }
+                        parsePoint();
                     }
                 }
                 break;
@@ -274,6 +278,43 @@ public class PatternDeblockView extends View {
 
         postInvalidate();// 进行重绘
         return true;
+    }
+
+    /**
+     * 进行跳过添加
+     */
+    private void parsePoint() {
+        int len = mChoosePoints.size();
+        //如果被选中的点个数不大于1
+        if (len <= 1) {
+            return;
+        }
+
+        //拿到最后最后两个Point
+        Point a = mChoosePoints.get(len - 1);
+        Point b = mChoosePoints.get(len - 2);
+
+        Point p = null;
+        float x = 0;
+        float y = 0;
+
+        if (a.x == b.x && Math.abs(a.y - b.y) == min / 2) {//在同一条竖线
+            Log.i(TAG, "a.x=b.x");
+            x = a.x;
+            y = a.y - (a.y - b.y) / 2;
+        } else if (Math.abs(a.x - b.x) == min / 2 && a.y == b.y) {//在同一条直线
+            x = a.x - (a.x - b.x) / 2;
+            y = a.y;
+        } else if (Math.abs(a.x - b.x) == min / 2 && Math.abs(a.y - b.y) == min / 2) {//在同一条斜线上
+            x = a.x - (a.x - b.x) / 2;
+            y = a.y - (a.y - b.y) / 2;
+        }
+        p = choosePoints(x, y);
+        Log.i(TAG, "X:" + x + ";;;;;Y:" + y);
+        if (null != p) {
+            p.state = Point.PRESSEDSTATE;
+            mChoosePoints.add(len - 1, p);
+        }
     }
 
 
@@ -338,6 +379,7 @@ public class PatternDeblockView extends View {
      * @return
      */
     private Point choosePoints(float movingX, float movingY) {
+        Log.i(TAG, "movingX:" + movingX + ";;;;;movingY:" + movingY);
         for (int i = 0; i < 3; i++) {
             for (int j = 0; j < 3; j++) {
                 Point point = mPoints[i][j];
@@ -384,7 +426,7 @@ class Point {
      * @return
      */
     public static boolean isInPoint(Point point, float movingX, float movingY, float radius) {
-        if (Math.sqrt((movingX - point.x) * (movingX - point.x) + (movingY - point.y) * (movingY - point.y)) < radius) {
+        if (Math.sqrt((movingX - point.x) * (movingX - point.x) + (movingY - point.y) * (movingY - point.y)) <= radius) {
             return true;
         } else {
             return false;
