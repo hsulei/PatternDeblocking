@@ -11,12 +11,18 @@ import android.view.View;
 
 import com.hsulei.portraitchoose.patterndeblocking.R;
 
+import java.util.ArrayList;
+import java.util.List;
+
 /**
  * Created by 46697 on 2016/10/19.
  * 九宫格解锁图案
  */
 
 public class PatternDeblockView extends View {
+
+    private final static String TAG = "PatternDeblockView";
+
     // 按下时的颜色
     private int mPressedColor = Color.BLUE;
     //错误时的颜色
@@ -38,6 +44,22 @@ public class PatternDeblockView extends View {
 
     //画笔
     private Paint mPaint;
+
+    //被选中的点
+    private List<Point> mChoosePoints;
+
+    private float movingX;
+    private float movingY;
+
+    //用于判断是ActionDown时有点被选中
+    private boolean isChosen;
+    //用于判断ActionDown时是否在重复点中
+    private boolean isRepeat;
+    //用于判读是否已经结束
+    private boolean isFinish;
+    //用于判断是否错误我
+    private boolean isError;
+
 
     public PatternDeblockView(Context context) {
         super(context);
@@ -85,9 +107,12 @@ public class PatternDeblockView extends View {
                 }
             }
         }
+        mChoosePoints = new ArrayList<Point>();
+
         //设置半径
-        mRadius = 20;
+        mRadius = 40;
         mPaint = new Paint();
+        mPaint.setStrokeWidth(5);//设置线宽
         mPaint.setAntiAlias(true);
     }
 
@@ -101,6 +126,8 @@ public class PatternDeblockView extends View {
         }
 
         drawPoints(canvas, mPoints);
+        drawLine(canvas, movingX, movingY);
+
         super.onDraw(canvas);
     }
 
@@ -133,6 +160,7 @@ public class PatternDeblockView extends View {
 
         float offsetX = 0;
         float offsetY = 0;
+
         int min = Math.min(width, height);//获取最小值
         if (width >= height) {//如果宽比高大
             offsetX = (width - height) / 2;
@@ -204,31 +232,163 @@ public class PatternDeblockView extends View {
 
     @Override
     public boolean onTouchEvent(MotionEvent event) {
+        //获得当其移动位置
+        movingX = event.getX();
+        movingY = event.getY();
+        Point point = null;
+        switch (event.getAction()) {
+            case MotionEvent.ACTION_DOWN:
+                if (!isFinish) {
+                    point = choosePoints(movingX, movingY);//判断落下的点是否在9个点上
+                    if (null != point) {
+                        mChoosePoints.add(point);//如果不为空加入选中的集合中
+                        isChosen = true;// 表示已经与了选择
+                    }
+                }
+                break;
+            case MotionEvent.ACTION_MOVE:
+                //移动时有两情况需要进考虑，1：在点的范围时需要把点选中，2：重复点不计算
+                if (!isFinish) {
+                    isRepeat = checkIsRepeat(movingX, movingY);
+                    if (!isRepeat) {//如果不在已经选中的点中，判读是否在点阵中
+                        point = choosePoints(movingX, movingY);
+                        if (null != point) {
+                            mChoosePoints.add(point);
+                        }
+                    }
+                }
+                break;
+            case MotionEvent.ACTION_UP:
+                isFinish = true;
+                //对点数进行判读 如果连起来的点数少于5设置成
+                int len = mChoosePoints.size();
+                if (len < 5) {
+                    isError = true;
+                    for (int i = 0; i < len; i++) {
+                        point = mChoosePoints.get(i);
+                        point.state = Point.ERRORSTATE;
+                    }
+                }
+                break;
+        }
 
+        postInvalidate();// 进行重绘
         return true;
     }
 
-    /**
-     * 点的代表
-     */
-    public class Point {
-        //圆有三种属性 0:未按下  1:按下 2:错误
-        public final static int NORMALSTATE = 0;
-        public final static int PRESSEDSTATE = 1;
-        public final static int ERRORSTATE = 2;
 
-        //状态
-        public int state = NORMALSTATE;
-        //x坐标
-        public float x;
-        //y坐标
-        public float y;
+    private void drawLine(Canvas canvas, float movingX, float movingY) {
+        float secondX = 0;
+        float secondY = 0;
+        float firstX = 0;
+        float firstY = 0;
+        if (isError) {
+            mPaint.setColor(mErrorLineColor);//设置错误时的线颜色
+        } else {
+            mPaint.setColor(mPressedLineColor);
+        }
+        int len = mChoosePoints.size();
 
-        public Point(float x, float y) {
-            this.x = x;
-            this.y = y;
+        if (len >= 1) {
+            firstX = mChoosePoints.get(0).x;
+            firstY = mChoosePoints.get(0).y;
+        }
+        //画点中的线
+        for (int i = 1; i < len; i++) {
+            secondX = mChoosePoints.get(i).x;
+            secondY = mChoosePoints.get(i).y;
+
+            canvas.drawLine(firstX, firstY, secondX, secondY, mPaint);
+            firstX = secondX;
+            firstY = secondY;
         }
 
+        if (!isFinish) {
+            //画点到点的线
+            if (len >= 1) {
+                canvas.drawLine(firstX, firstY, movingX, movingY, mPaint);
+            }
+        }
+
+    }
+
+    /**
+     * 判断是否在重复点中
+     *
+     * @param movingX
+     * @param movingY
+     * @return
+     */
+    private boolean checkIsRepeat(float movingX, float movingY) {
+        int len = mChoosePoints.size();
+        for (int i = 0; i < len; i++) {
+            if (Point.isInPoint(mChoosePoints.get(i), movingX, movingY, mRadius)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * (
+     * 在点阵中找到点
+     *
+     * @param movingX
+     * @param movingY
+     * @return
+     */
+    private Point choosePoints(float movingX, float movingY) {
+        for (int i = 0; i < 3; i++) {
+            for (int j = 0; j < 3; j++) {
+                Point point = mPoints[i][j];
+                if (Point.isInPoint(point, movingX, movingY, mRadius)) {
+                    //修改点的状态(被选中)
+                    point.state = Point.PRESSEDSTATE;
+                    return point;
+                }
+            }
+        }
+        return null;
+    }
+
+}
+
+/**
+ * 点的代表
+ */
+class Point {
+    //圆有三种属性 0:未按下  1:按下 2:错误
+    public final static int NORMALSTATE = 0;
+    public final static int PRESSEDSTATE = 1;
+    public final static int ERRORSTATE = 2;
+
+    //状态
+    public int state = NORMALSTATE;
+    //x坐标
+    public float x;
+    //y坐标
+    public float y;
+
+    public Point(float x, float y) {
+        this.x = x;
+        this.y = y;
+    }
+
+    /**
+     * 判断坐标是否在点的范围之间
+     *
+     * @param point
+     * @param movingX
+     * @param movingY
+     * @param radius
+     * @return
+     */
+    public static boolean isInPoint(Point point, float movingX, float movingY, float radius) {
+        if (Math.sqrt((movingX - point.x) * (movingX - point.x) + (movingY - point.y) * (movingY - point.y)) < radius) {
+            return true;
+        } else {
+            return false;
+        }
     }
 
 }
